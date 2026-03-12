@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgroWatch — Global Food Supply Intelligence</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050a0f;
+    --panel: #080e15;
+    --border: #0f2035;
+    --accent: #00e5a0;
+    --amber: #f5a623;
+    --red: #ff4757;
+    --blue: #1a8cff;
+    --text: #c8daea;
+    --muted: #4a6278;
+    --font-mono: 'Space Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    height: 48px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    flex-shrink: 0;
+    z-index: 1000;
+  }
+
+  .logo {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 18px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo-dot {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  .header-meta {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+
+  .stat-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .stat-pill span { color: var(--text); font-weight: 700; }
+  .stat-pill.warn span { color: var(--amber); }
+  .stat-pill.danger span { color: var(--red); }
+
+  .live-badge {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10px; color: var(--accent); font-weight: 700;
+  }
+  .live-dot { width:6px; height:6px; background: var(--accent); border-radius:50%; animation: pulse 1.5s infinite; }
+
+  /* ── LAYOUT ── */
+  .workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── LEFT SIDEBAR ── */
+  .sidebar-left {
+    width: 260px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .section-label {
+    padding: 10px 14px 6px;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+  }
+
+  /* FILTERS */
+  .filters {
+    padding: 10px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .filter-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s;
+  }
+
+  .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+  .filter-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(0,229,160,0.07); }
+
+  /* ALERTS */
+  .alerts-list { flex: 1; overflow-y: auto; }
+  .alerts-list::-webkit-scrollbar { width: 3px; }
+  .alerts-list::-webkit-scrollbar-track { background: transparent; }
+  .alerts-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .alert-item {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .alert-item:hover { background: rgba(255,255,255,0.02); }
+
+  .alert-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+
+  .alert-country { font-family: var(--font-display); font-weight: 600; font-size: 12px; color: var(--text); }
+
+  .risk-badge {
+    font-size: 9px; padding: 2px 6px; border-radius: 1px; font-weight: 700; letter-spacing: 0.08em;
+  }
+  .risk-critical { background: rgba(255,71,87,0.15); color: var(--red); border: 1px solid var(--red); }
+  .risk-high     { background: rgba(245,166,35,0.15); color: var(--amber); border: 1px solid var(--amber); }
+  .risk-medium   { background: rgba(26,140,255,0.1);  color: var(--blue); border: 1px solid var(--blue); }
+  .risk-low      { background: rgba(0,229,160,0.08);  color: var(--accent); border: 1px solid var(--accent); }
+
+  .alert-detail { font-size: 10px; color: var(--muted); line-height: 1.5; }
+  .alert-crop { display: inline-block; margin-top: 4px; font-size: 9px; padding: 1px 5px; border: 1px solid var(--border); color: var(--muted); border-radius: 1px; }
+
+  /* ── MAP ── */
+  #map-container {
+    flex: 1;
+    position: relative;
+    background: #030810;
+  }
+
+  #map { width: 100%; height: 100%; }
+
+  /* Override Leaflet dark */
+  .leaflet-container { background: #030810 !important; font-family: var(--font-mono); }
+  .leaflet-tile-pane { filter: brightness(0.7) saturate(0.3) hue-rotate(200deg); }
+  .leaflet-control-attribution { background: rgba(5,10,15,0.8) !important; color: var(--muted) !important; font-size: 9px !important; }
+  .leaflet-control-attribution a { color: var(--muted) !important; }
+  .leaflet-control-zoom a { background: var(--panel) !important; color: var(--text) !important; border-color: var(--border) !important; }
+
+  /* Map overlays */
+  .map-overlay-label {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+    background: transparent;
+    border: none;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  /* Country tooltip */
+  .country-tooltip {
+    background: var(--panel) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 11px !important;
+    border-radius: 2px !important;
+    padding: 8px 12px !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6) !important;
+    white-space: nowrap;
+  }
+
+  /* ── RIGHT SIDEBAR ── */
+  .sidebar-right {
+    width: 280px;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* Detail panel */
+  .detail-panel { padding: 14px; border-bottom: 1px solid var(--border); }
+  .detail-title { font-family: var(--font-display); font-weight: 800; font-size: 16px; color: var(--text); margin-bottom: 4px; }
+  .detail-sub { font-size: 10px; color: var(--muted); margin-bottom: 12px; }
+
+  .risk-gauge {
+    position: relative;
+    height: 6px;
+    background: var(--border);
+    border-radius: 1px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .risk-fill {
+    height: 100%;
+    border-radius: 1px;
+    transition: width 0.8s ease;
+  }
+
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .metric-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    border-radius: 2px;
+  }
+  .metric-label { font-size: 9px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .metric-value { font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+  .metric-value.green { color: var(--accent); }
+  .metric-value.amber { color: var(--amber); }
+  .metric-value.red { color: var(--red); }
+  .metric-value.blue { color: var(--blue); }
+
+  /* Trend chart area */
+  .chart-area { padding: 14px; border-bottom: 1px solid var(--border); }
+  .chart-area canvas { width: 100% !important; }
+
+  /* Supply chain paths */
+  .supply-chain-list { flex: 1; overflow-y: auto; padding: 0; }
+  .supply-chain-list::-webkit-scrollbar { width: 3px; }
+  .supply-chain-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .chain-item {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .chain-icon { font-size: 16px; }
+  .chain-info { flex: 1; }
+  .chain-route { font-size: 10px; color: var(--text); margin-bottom: 2px; }
+  .chain-detail { font-size: 9px; color: var(--muted); }
+  .chain-status {
+    font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 1px;
+  }
+  .chain-ok { color: var(--accent); border: 1px solid var(--accent); }
+  .chain-warn { color: var(--amber); border: 1px solid var(--amber); }
+  .chain-crit { color: var(--red); border: 1px solid var(--red); }
+
+  /* Legend */
+  .map-legend {
+    position: absolute;
+    bottom: 24px;
+    left: 14px;
+    z-index: 1000;
+    background: rgba(8,14,21,0.9);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    border-radius: 2px;
+    backdrop-filter: blur(4px);
+  }
+  .legend-title { font-size: 9px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 10px; color: var(--muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Search */
+  .search-bar {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .search-bar input {
+    width: 100%;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 6px 10px;
+    border-radius: 2px;
+    outline: none;
+  }
+  .search-bar input:focus { border-color: var(--accent); }
+  .search-bar input::placeholder { color: var(--muted); }
+
+  /* Scan line effect */
+  #map-container::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 500;
+  }
+
+  /* Popup custom */
+  .leaflet-popup-content-wrapper {
+    background: var(--panel) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 2px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.8) !important;
+    color: var(--text) !important;
+  }
+  .leaflet-popup-tip { background: var(--panel) !important; }
+  .leaflet-popup-close-button { color: var(--muted) !important; }
+  .popup-inner { font-family: var(--font-mono); font-size: 11px; min-width: 180px; }
+  .popup-title { font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--text); margin-bottom: 8px; }
+  .popup-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .popup-key { color: var(--muted); }
+  .popup-val { font-weight: 700; }
+  .popup-val.g { color: var(--accent); }
+  .popup-val.a { color: var(--amber); }
+  .popup-val.r { color: var(--red); }
+  .popup-val.b { color: var(--blue); }
+  .popup-bar-wrap { margin-top: 8px; height: 4px; background: var(--border); border-radius: 1px; overflow: hidden; }
+  .popup-bar-fill { height: 100%; border-radius: 1px; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .animate-in { animation: fadeIn 0.4s ease forwards; }
+
+  .ticker {
+    height: 24px;
+    background: rgba(0,229,160,0.05);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .ticker-label {
+    padding: 0 10px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+    border-right: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .ticker-track {
+    display: flex;
+    gap: 0;
+    animation: scroll-left 40s linear infinite;
+    white-space: nowrap;
+  }
+  .ticker-track span {
+    font-size: 10px;
+    color: var(--muted);
+    padding: 0 20px;
+  }
+  .ticker-track span b { color: var(--text); }
+  .ticker-track span.warn b { color: var(--amber); }
+  .ticker-track span.danger b { color: var(--red); }
+  @keyframes scroll-left {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    AgroWatch
+    <span style="font-size:11px; color: var(--muted); font-weight:400; margin-left:4px;">Global Food Supply Intelligence</span>
+  </div>
+  <div class="header-meta">
+    <div class="stat-pill danger">Countries at Risk <span id="risk-count">34</span></div>
+    <div class="stat-pill warn">Active Disruptions <span id="disruption-count">12</span></div>
+    <div class="stat-pill">Monitored Routes <span>2,847</span></div>
+    <div class="live-badge"><div class="live-dot"></div> LIVE</div>
+  </div>
+</header>
+
+<!-- MAIN WORKSPACE -->
+<div class="workspace">
+
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar-left">
+    <div class="section-label">▸ Crop Filter</div>
+    <div class="filters">
+      <button class="filter-btn active" onclick="setCrop(this,'all')">All</button>
+      <button class="filter-btn" onclick="setCrop(this,'wheat')">🌾 Wheat</button>
+      <button class="filter-btn" onclick="setCrop(this,'rice')">🍚 Rice</button>
+      <button class="filter-btn" onclick="setCrop(this,'corn')">🌽 Corn</button>
+      <button class="filter-btn" onclick="setCrop(this,'soy')">🫘 Soy</button>
+      <button class="filter-btn" onclick="setCrop(this,'pulses')">🫘 Pulses</button>
+      <button class="filter-btn" onclick="setCrop(this,'dairy')">🥛 Dairy</button>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="country-search" placeholder="Search country…" oninput="filterAlerts(this.value)">
+    </div>
+    <div class="section-label">▸ Risk Alerts</div>
+    <div class="alerts-list" id="alerts-list"></div>
+  </div>
+
+  <!-- MAP -->
+  <div id="map-container">
+    <div id="map"></div>
+
+    <!-- Legend -->
+    <div class="map-legend">
+      <div class="legend-title">Food Shortage Risk</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff4757"></div>Critical (>75)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f5a623"></div>High (50–75)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1a8cff"></div>Medium (25–50)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#00e5a0"></div>Low (<25)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1a2840"></div>No Data</div>
+    </div>
+  </div>
+
+  <!-- RIGHT SIDEBAR -->
+  <div class="sidebar-right">
+    <div class="section-label">▸ Country Analysis</div>
+    <div class="detail-panel" id="detail-panel">
+      <div class="detail-title" id="detail-title">Select a Country</div>
+      <div class="detail-sub" id="detail-sub">Click any country on the map or from the alerts list</div>
+      <div class="risk-gauge"><div class="risk-fill" id="risk-fill" style="width:0%;background:var(--accent)"></div></div>
+      <div class="metrics-grid" id="metrics-grid">
+        <div class="metric-card"><div class="metric-label">Shortage Risk</div><div class="metric-value" id="m-risk">—</div></div>
+        <div class="metric-card"><div class="metric-label">Import Dep.</div><div class="metric-value" id="m-import">—</div></div>
+        <div class="metric-card"><div class="metric-label">Stock Days</div><div class="metric-value" id="m-stock">—</div></div>
+        <div class="metric-card"><div class="metric-label">Price Index</div><div class="metric-value" id="m-price">—</div></div>
+      </div>
+    </div>
+
+    <div class="chart-area">
+      <div class="section-label" style="padding:0 0 8px; border:none">▸ 6-Month Risk Trend</div>
+      <canvas id="trend-chart" height="80"></canvas>
+    </div>
+
+    <div class="section-label">▸ Supply Chain Status</div>
+    <div class="supply-chain-list" id="supply-chain-list"></div>
+  </div>
+</div>
+
+<!-- TICKER -->
+<div class="ticker">
+  <div class="ticker-label">FEED</div>
+  <div class="ticker-track" id="ticker-track"></div>
+</div>
+
+<!-- SCRIPTS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+
+// ─── DATA ────────────────────────────────────────────────
+const countryData = {
+  "Yemen":       { risk:92, import:92, stock:12, price:187, lat:15.5, lng:48.5, crops:["wheat","pulses"],       trend:[78,80,83,86,89,92], alerts:"Conflict + import blockade. Severe famine risk." },
+  "Somalia":     { risk:88, import:85, stock:15, price:172, lat:5.2,  lng:46.2, crops:["wheat","rice"],         trend:[70,74,77,82,85,88], alerts:"Drought + port disruption. Critical cereal deficit." },
+  "Ethiopia":    { risk:81, import:60, stock:22, price:158, lat:9.1,  lng:40.5, crops:["corn","pulses"],        trend:[68,71,74,77,79,81], alerts:"El Niño impact. Harvest down 34%." },
+  "Sudan":       { risk:83, import:72, stock:18, price:195, lat:15.5, lng:32.5, crops:["wheat","soy"],          trend:[65,70,74,78,80,83], alerts:"Conflict halted planting season." },
+  "Afghanistan": { risk:79, import:78, stock:25, price:163, lat:33.9, lng:67.7, crops:["wheat"],                trend:[60,64,68,72,76,79], alerts:"Sanctions restrict import. Wheat critical." },
+  "Syria":       { risk:76, import:80, stock:20, price:178, lat:35.0, lng:38.0, crops:["wheat","rice"],         trend:[62,64,67,70,73,76], alerts:"Ongoing displacement. 12.1M food insecure." },
+  "Niger":       { risk:74, import:55, stock:28, price:145, lat:17.6, lng:8.1,  crops:["corn","pulses"],        trend:[55,58,62,67,70,74], alerts:"Coup + aid suspension. Sahel drought." },
+  "Haiti":       { risk:72, import:88, stock:19, price:182, lat:19.0, lng:-72.3,crops:["rice","corn"],          trend:[58,61,64,67,70,72], alerts:"Gang control of port. Import collapse." },
+  "Pakistan":    { risk:62, import:42, stock:38, price:138, lat:30.4, lng:69.3, crops:["wheat","rice"],         trend:[48,50,53,56,59,62], alerts:"Flood damage to Sindh crop belt." },
+  "Bangladesh":  { risk:58, import:48, stock:42, price:128, lat:23.7, lng:90.4, crops:["rice","wheat"],         trend:[42,44,47,50,54,58], alerts:"Cyclone Mocha impact. Coastal farmland salinity." },
+  "Egypt":       { risk:55, import:68, stock:45, price:155, lat:26.8, lng:30.8, crops:["wheat"],                trend:[38,42,46,50,53,55], alerts:"Black Sea wheat cutoff. FX crisis reduces imports." },
+  "Myanmar":     { risk:54, import:30, stock:50, price:120, lat:19.2, lng:96.7, crops:["rice"],                 trend:[40,43,45,48,51,54], alerts:"Political crisis disrupts distribution." },
+  "Venezuela":   { risk:60, import:55, stock:35, price:165, lat:6.4,  lng:-66.6,crops:["corn","rice"],          trend:[46,49,52,55,57,60], alerts:"Economic collapse. Food import capacity low." },
+  "Lebanon":     { risk:68, import:82, stock:22, price:175, lat:33.9, lng:35.9, crops:["wheat"],                trend:[52,56,59,62,65,68], alerts:"Port dysfunction. Currency crisis persists." },
+  "Kenya":       { risk:49, import:38, stock:55, price:118, lat:-0.5, lng:37.9, crops:["corn","pulses"],        trend:[35,37,40,43,46,49], alerts:"Northern drought impacting pastoral areas." },
+  "India":       { risk:28, import:12, stock:120,price:105, lat:20.6, lng:78.9, crops:["wheat","rice","soy"],   trend:[30,29,28,27,27,28], alerts:"Moderate. Onion export ban in effect." },
+  "China":       { risk:22, import:15, stock:180,price:102, lat:35.9, lng:104.2,crops:["wheat","rice","corn"],  trend:[24,23,22,22,22,22], alerts:"Stable. Strategic reserves at capacity." },
+  "USA":         { risk:8,  import:5,  stock:240,price:98,  lat:37.1, lng:-95.7,crops:["wheat","corn","soy"],   trend:[9,9,8,8,8,8],       alerts:"Low risk. Major net exporter." },
+  "Brazil":      { risk:12, import:8,  stock:200,price:99,  lat:-14.2,lng:-51.9,crops:["soy","corn","rice"],    trend:[13,13,12,12,12,12], alerts:"Low risk. Record soy harvest projected." },
+  "Australia":   { risk:10, import:6,  stock:190,price:97,  lat:-25.3,lng:133.8,crops:["wheat"],                trend:[11,11,10,10,10,10], alerts:"Low risk. La Niña brings good rains." },
+  "Russia":      { risk:18, import:5,  stock:160,price:101, lat:61.5, lng:105.3,crops:["wheat"],                trend:[14,15,16,17,18,18], alerts:"Export restrictions. Sanctions complexity." },
+  "Ukraine":     { risk:35, import:10, stock:90, price:112, lat:48.4, lng:31.2, crops:["wheat","corn","soy"],   trend:[55,52,48,44,40,35], alerts:"Improving. Black Sea corridor reopened." },
+  "Indonesia":   { risk:24, import:22, stock:130,price:104, lat:-0.8, lng:113.9,crops:["rice","soy"],           trend:[26,25,25,24,24,24], alerts:"Stable. Palm oil export resuming." },
+  "Nigeria":     { risk:52, import:35, stock:48, price:142, lat:9.1,  lng:8.7,  crops:["corn","rice"],          trend:[38,42,45,48,50,52], alerts:"Insurgency in north. Naira FX pressuring imports." },
+  "DR Congo":    { risk:66, import:50, stock:30, price:148, lat:-4.0, lng:21.8, crops:["corn","pulses"],        trend:[50,53,57,60,63,66], alerts:"Conflict zones. Distribution severely limited." },
+  "Zimbabwe":    { risk:58, import:44, stock:36, price:152, lat:-19.0,lng:29.9, crops:["corn"],                 trend:[44,47,49,52,55,58], alerts:"Hyperinflation impacting food purchasing power." },
+  "Sri Lanka":   { risk:45, import:58, stock:50, price:135, lat:7.9,  lng:80.8, crops:["rice","wheat"],         trend:[62,58,54,50,48,45], alerts:"Improving. IMF program stabilising imports." },
+  "Turkey":      { risk:32, import:18, stock:88, price:130, lat:38.9, lng:35.2, crops:["wheat"],                trend:[28,30,31,32,32,32], alerts:"Moderate. Earthquake impact on SE farmland." },
+  "Iran":        { risk:42, import:38, stock:60, price:140, lat:32.4, lng:53.7, crops:["wheat"],                trend:[35,37,39,40,41,42], alerts:"Sanctions limit imports. Water scarcity." },
+  "Mali":        { risk:71, import:50, stock:25, price:155, lat:17.6, lng:-3.9, crops:["corn","pulses"],        trend:[55,59,62,66,68,71], alerts:"Sahel drought. Aid access blocked." },
+  "Cambodia":    { risk:30, import:20, stock:95, price:106, lat:12.6, lng:104.9,crops:["rice"],                 trend:[32,31,30,30,30,30], alerts:"Low-moderate. Rice export competitiveness." },
+  "Philippines": { risk:34, import:28, stock:85, price:114, lat:12.9, lng:121.8,crops:["rice"],                 trend:[36,35,35,34,34,34], alerts:"Typhoon season impact on Nueva Ecija." },
+  "Mexico":      { risk:25, import:20, stock:110,price:107, lat:23.6, lng:-102.6,crops:["corn","wheat"],        trend:[26,26,25,25,25,25], alerts:"Low. Corn self-sufficient. Nearshoring boosts income." },
+  "Colombia":    { risk:28, import:24, stock:100,price:108, lat:4.6,  lng:-74.3,crops:["rice","corn"],          trend:[30,29,29,28,28,28], alerts:"Low. Peace dividend improving rural agriculture." },
+};
+
+const supplyChainData = [
+  { icon:"🚢", route:"Black Sea → MENA", detail:"Wheat & Corn, 45M MT/yr", status:"ok" },
+  { icon:"🚢", route:"Gulf of Aden", detail:"Red Sea disruption active", status:"crit" },
+  { icon:"🚢", route:"Malacca Strait", detail:"Rice & Palm Oil corridor", status:"ok" },
+  { icon:"✈️", route:"Sahel Airlifts", detail:"WFP emergency ops, 12 flights/wk", status:"warn" },
+  { icon:"🚛", route:"Corn Belt → Mexico", detail:"USMCA land routes active", status:"ok" },
+  { icon:"🛢️", route:"Fertilizer — Russia/Belarus", detail:"Potash exports down 22%", status:"warn" },
+  { icon:"🚢", route:"Brazil → Asia Soy", detail:"Record tonnage, ports congested", status:"warn" },
+  { icon:"🚢", route:"Australia → SE Asia Wheat", detail:"Good season, normal volumes", status:"ok" },
+  { icon:"🛤️", route:"E. Africa Aid Corridors", detail:"3 routes active, 1 suspended", status:"warn" },
+];
+
+const tickerMessages = [
+  { text:"🌾 WHEAT · Chicago futures <b>+2.3%</b>", cls:"warn" },
+  { text:"🌽 CORN · CBOT <b>-0.8%</b>", cls:"" },
+  { text:"🫘 SOYBEAN · Chicago <b>+1.1%</b>", cls:"warn" },
+  { text:"⚠ RED SEA · Shipping disruption <b>DAY 48</b>", cls:"danger" },
+  { text:"📦 WFP · Emergency rations deployed to <b>Yemen, Somalia</b>", cls:"warn" },
+  { text:"🌧 EL NIÑO · Horn of Africa rainfall <b>-34% anomaly</b>", cls:"danger" },
+  { text:"🌾 UKRAINE · Odessa corridor export <b>RESUMED</b>", cls:"" },
+  { text:"📊 FAO FOOD PRICE INDEX · <b>118.3</b> (Mar 2026)", cls:"" },
+  { text:"⚡ FERTILIZER · Natural gas prices <b>+8.2%</b> impacting urea", cls:"warn" },
+  { text:"🇮🇳 INDIA · Onion export ban <b>EXTENDED</b> 90 days", cls:"warn" },
+  { text:"🇷🇺 RUSSIA · Wheat export quota <b>REDUCED</b> by 3M MT", cls:"danger" },
+  { text:"🇧🇷 BRAZIL · Soy harvest <b>RECORD</b> 163M MT projected", cls:"" },
+];
+
+// ─── TICKER ────────────────────────────────────────────────
+function buildTicker() {
+  const t = document.getElementById('ticker-track');
+  const msgs = [...tickerMessages, ...tickerMessages]; // double for loop
+  t.innerHTML = msgs.map(m => `<span class="${m.cls}">${m.text}</span>`).join('');
+}
+
+// ─── ALERTS LIST ────────────────────────────────────────────
+let currentCrop = 'all';
+let allCountries = Object.entries(countryData);
+
+function riskLabel(r) {
+  if (r >= 75) return ['CRITICAL','risk-critical'];
+  if (r >= 50) return ['HIGH','risk-high'];
+  if (r >= 25) return ['MEDIUM','risk-medium'];
+  return ['LOW','risk-low'];
+}
+
+function riskColor(r) {
+  if (r >= 75) return '#ff4757';
+  if (r >= 50) return '#f5a623';
+  if (r >= 25) return '#1a8cff';
+  return '#00e5a0';
+}
+
+function buildAlerts(filter='', crop='all') {
+  const list = document.getElementById('alerts-list');
+  const sorted = allCountries
+    .filter(([name,d]) => {
+      if (filter && !name.toLowerCase().includes(filter.toLowerCase())) return false;
+      if (crop !== 'all' && !d.crops.includes(crop)) return false;
+      return true;
+    })
+    .sort((a,b) => b[1].risk - a[1].risk);
+
+  list.innerHTML = sorted.map(([name,d]) => {
+    const [label, cls] = riskLabel(d.risk);
+    return `<div class="alert-item animate-in" onclick="selectCountry('${name}')">
+      <div class="alert-header">
+        <div class="alert-country">${name}</div>
+        <div class="risk-badge ${cls}">${label}</div>
+      </div>
+      <div class="alert-detail">${d.alerts}</div>
+      <div>
+        ${d.crops.map(c=>`<span class="alert-crop">${c}</span>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setCrop(btn, crop) {
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentCrop = crop;
+  buildAlerts(document.getElementById('country-search').value, crop);
+  refreshMarkers();
+}
+
+function filterAlerts(val) {
+  buildAlerts(val, currentCrop);
+}
+
+// ─── SUPPLY CHAIN ────────────────────────────────────────────
+function buildSupplyChain() {
+  const list = document.getElementById('supply-chain-list');
+  list.innerHTML = supplyChainData.map(s => {
+    const [cls, label] = s.status === 'ok' ? ['chain-ok','OK'] :
+                         s.status === 'warn' ? ['chain-warn','DELAY'] : ['chain-crit','ALERT'];
+    return `<div class="chain-item">
+      <div class="chain-icon">${s.icon}</div>
+      <div class="chain-info">
+        <div class="chain-route">${s.route}</div>
+        <div class="chain-detail">${s.detail}</div>
+      </div>
+      <div class="chain-status ${cls}">${label}</div>
+    </div>`;
+  }).join('');
+}
+
+// ─── TREND CHART ────────────────────────────────────────────
+let trendChart = null;
+function buildChart(trend) {
+  const ctx = document.getElementById('trend-chart').getContext('2d');
+  const labels = ['Oct','Nov','Dec','Jan','Feb','Mar'];
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: trend,
+        borderColor: '#00e5a0',
+        backgroundColor: 'rgba(0,229,160,0.06)',
+        borderWidth: 2,
+        pointRadius: 3,
+        pointBackgroundColor: '#00e5a0',
+        tension: 0.4,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display:false }, tooltip: {
+        backgroundColor: '#080e15',
+        borderColor: '#0f2035',
+        borderWidth: 1,
+        titleColor: '#c8daea',
+        bodyColor: '#00e5a0',
+        callbacks: { label: ctx => ' Risk Score: '+ctx.raw }
+      }},
+      scales: {
+        x: { grid:{ color:'rgba(255,255,255,0.04)' }, ticks:{ color:'#4a6278', font:{size:9} } },
+        y: { grid:{ color:'rgba(255,255,255,0.04)' }, ticks:{ color:'#4a6278', font:{size:9} }, min:0, max:100 }
+      }
+    }
+  });
+}
+
+// ─── DETAIL PANEL ────────────────────────────────────────────
+function selectCountry(name) {
+  const d = countryData[name];
+  if (!d) return;
+  document.getElementById('detail-title').textContent = name;
+  document.getElementById('detail-sub').textContent = d.alerts;
+  const [label] = riskLabel(d.risk);
+  const col = riskColor(d.risk);
+  document.getElementById('risk-fill').style.width = d.risk + '%';
+  document.getElementById('risk-fill').style.background = col;
+
+  const mRisk = document.getElementById('m-risk');
+  mRisk.textContent = d.risk + '/100';
+  mRisk.className = 'metric-value ' + (d.risk>=75?'red':d.risk>=50?'amber':d.risk>=25?'blue':'green');
+
+  const mImport = document.getElementById('m-import');
+  mImport.textContent = d.import + '%';
+  mImport.className = 'metric-value ' + (d.import>=70?'red':d.import>=40?'amber':'green');
+
+  const mStock = document.getElementById('m-stock');
+  mStock.textContent = d.stock + 'd';
+  mStock.className = 'metric-value ' + (d.stock<30?'red':d.stock<60?'amber':'green');
+
+  const mPrice = document.getElementById('m-price');
+  mPrice.textContent = d.price;
+  mPrice.className = 'metric-value ' + (d.price>=160?'red':d.price>=120?'amber':'green');
+
+  buildChart(d.trend);
+
+  // fly map to country
+  if (map) map.flyTo([d.lat, d.lng], 5, {duration:1.2});
+}
+
+// ─── MAP ────────────────────────────────────────────────────
+let map, markersLayer;
+
+function initMap() {
+  map = L.map('map', {
+    center: [20, 20],
+    zoom: 3,
+    zoomControl: true,
+    attributionControl: true,
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 10,
+  }).addTo(map);
+
+  markersLayer = L.layerGroup().addTo(map);
+  refreshMarkers();
+}
+
+function refreshMarkers() {
+  markersLayer.clearLayers();
+  allCountries
+    .filter(([,d]) => currentCrop === 'all' || d.crops.includes(currentCrop))
+    .forEach(([name, d]) => {
+      const col = riskColor(d.risk);
+      const size = Math.max(10, Math.round(d.risk / 8));
+      const marker = L.circleMarker([d.lat, d.lng], {
+        radius: size,
+        fillColor: col,
+        color: col,
+        weight: 1,
+        opacity: 0.9,
+        fillOpacity: 0.45,
+      });
+
+      const [label] = riskLabel(d.risk);
+      const barPct = d.risk + '%';
+      marker.bindPopup(`
+        <div class="popup-inner">
+          <div class="popup-title">${name}</div>
+          <div class="popup-row"><span class="popup-key">Risk Score</span><span class="popup-val ${d.risk>=75?'r':d.risk>=50?'a':d.risk>=25?'b':'g'}">${d.risk}/100 · ${label}</span></div>
+          <div class="popup-row"><span class="popup-key">Import Dep.</span><span class="popup-val">${d.import}%</span></div>
+          <div class="popup-row"><span class="popup-key">Stock Days</span><span class="popup-val">${d.stock}d</span></div>
+          <div class="popup-row"><span class="popup-key">Price Index</span><span class="popup-val">${d.price}</span></div>
+          <div class="popup-bar-wrap"><div class="popup-bar-fill" style="width:${barPct};background:${col}"></div></div>
+          <div style="margin-top:8px; font-size:10px; color:var(--muted)">${d.alerts}</div>
+        </div>
+      `, { className: '' });
+
+      marker.on('click', () => selectCountry(name));
+      markersLayer.addLayer(marker);
+    });
+}
+
+// ─── INIT ────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  buildTicker();
+  buildAlerts();
+  buildSupplyChain();
+  buildChart([40,42,44,46,48,50]);
+  initMap();
+  selectCountry('Yemen');
+
+  // Simulate live counter updates
+  setInterval(() => {
+    document.getElementById('disruption-count').textContent =
+      12 + Math.floor(Math.random()*3 - 1);
+  }, 8000);
+});
+</script>
+</body>
+</html>
